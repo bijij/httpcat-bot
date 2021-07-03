@@ -16,21 +16,32 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 import os
-import io
 import asyncio
 import random
 
-from typing import Union
+from typing import Dict, List, Optional, Tuple, TypedDict, Union
 
 import aiohttp
 import discord
 from discord.ext import commands
 
-import config
+from config import CONFIG
 
 # NOTE: This whole thing is made as a joke
 
-VALID_RANGES = (
+
+class _ConfigOptional(TypedDict, total=False):
+    intents: Dict[str, bool]
+
+
+class Config(_ConfigOptional):
+    token: str
+    command_prefix: str
+    support_server_url: str
+    source_url: str
+
+
+VALID_RANGES: Tuple[Tuple[int, int], ...] = (
     (100, 101),
     (200, 207),
     (300, 307),
@@ -39,13 +50,23 @@ VALID_RANGES = (
     (599, 599),
 )
 
+VALID_CODES: List[int] = []
+for start, stop in VALID_RANGES:
+    VALID_CODES.extend(range(start, stop))
+
+
+DEFAULT_INTENTS: Dict[str, bool] = {
+    "guilds": True,
+    "messages": True,
+    "reactions": True,
+}
+
 
 class Bot(commands.Bot):
     def __init__(self, **options):
-        intents = discord.Intents(guilds=True, messages=True)
-        super().__init__(**options, intents=intents)
+        super().__init__(**options)
         self.cache = {}
-        self.source_url = options.pop('source_url')
+        self.source_url = options.pop("source_url")
 
         # _before_invoke is set to None somewhere in the superclass
         self._before_invoke = self.before_invoke
@@ -56,9 +77,9 @@ class Bot(commands.Bot):
             CooldownMapping.from_cooldown(5, 10, BucketType.member),
             CooldownMapping.from_cooldown(500, 3600, BucketType.default),
         ]
-        self.__token = options.pop('token')
-        os.environ['JISHAKU_NO_UNDERSCORE'] = 'True'
-        self.load_extension('jishaku')
+        self.__token = options.pop("token")
+        os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
+        self.load_extension("jishaku")
 
     async def connect(self, *args, **kwargs):
         """Dodging depreciation warnings"""
@@ -89,14 +110,18 @@ class Bot(commands.Bot):
 
         if isinstance(error, commands.CommandNotFound):
             msg = ctx.message
+            assert msg is not None
+
             msg.content = f"http {msg.content}"
             return await bot.process_commands(msg)
 
         if isinstance(error, commands.CommandOnCooldown):
-            if ctx.command.name == "http":
+            cmd = ctx.command
+            assert cmd is not None
+
+            if cmd == "http":
                 return
-            elif (ctx.command.name != "help"
-                  and error.retry_after < 3):
+            elif cmd != "help" and error.retry_after < 3:
 
                 await asyncio.sleep(error.retry_after)
                 return await ctx.reinvoke()
@@ -111,13 +136,11 @@ class Bot(commands.Bot):
 
 class UsefulHelp(commands.HelpCommand):
     def __init__(self):
-        command_attrs = {
-            "cooldown": commands.Cooldown(1, 10, commands.BucketType.member)
-        }
+        command_attrs = {"cooldown": commands.Cooldown(1, 10)}
         super().__init__(command_attrs=command_attrs)
 
     def get_command_signature(self, command: commands.Command) -> str:
-        if command.name == 'http':
+        if command.name == "http":
             return f"{self.clean_prefix}{command.signature}"
 
         signature = "{0.clean_prefix}{1.qualified_name} {1.signature}"
@@ -129,10 +152,7 @@ class UsefulHelp(commands.HelpCommand):
         bot = self.context.bot
         invite_url = discord.utils.oauth_url(bot.user.id)
 
-        links = [
-            f"[Invite]({invite_url})",
-            f"[Source]({bot.source_url})"
-        ]
+        links = [f"[Invite]({invite_url})", f"[Source]({bot.source_url})"]
 
         embed.add_field(name="Useful links", value=" | ".join(links))
 
@@ -141,15 +161,12 @@ class UsefulHelp(commands.HelpCommand):
     async def send_all_help(self, *args, **kwargs):
         """Takes over all send_x_help that has multiple commands"""
         all_commands = [
-            self.context.bot.get_command(command)
-            for command in ("http", "random")
+            self.context.bot.get_command(command) for command in ("http", "random")
         ]
 
         embed = discord.Embed(title="Help")
         embed.color = discord.Color.from_hsv(
-            random.random(),
-            random.uniform(.75, .95),
-            1
+            random.random(), random.uniform(0.75, 0.95), 1
         )
 
         for command in all_commands:
@@ -167,36 +184,35 @@ class UsefulHelp(commands.HelpCommand):
         embed.add_field(name="description", value=command.help)
 
         if aliases := "\n-".join(command.aliases):
-            embed.add_field(name="aliases", value='-' + aliases)
+            embed.add_field(name="aliases", value="-" + aliases)
 
         return await self.send_embed(embed)
 
 
-bot = Bot(**config.PARAMS, help_command=UsefulHelp())
+intents = discord.Intents(**CONFIG.pop("intents", DEFAULT_INTENTS))
+bot = Bot(**CONFIG, help_command=UsefulHelp(), intents=intents)  # type: ignore
+
+
+def _parse_code(code: Optional[Union[int, str]] = None) -> int:
+    if code is None:
+        return 400
+    try:
+        code = int(code)
+        if code in VALID_CODES:
+            return code
+        return 404
+    except ValueError:
+        return 422
 
 
 @bot.command()
-async def http(ctx: commands.Context, *, code: Union[int, str] = None):
+async def http(ctx: commands.Context, *, code: Optional[Union[int, str]] = None):
     """Shows the corresponding http cat image given a status code"""
-    if code is None:
-        code = 400
-    if isinstance(code, str):
-        code = 422
-
-    if not (img := bot.cache.get(code)):
-        async with bot.session.get(f"https://http.cat/{code}.jpg") as resp:
-            bytes_img = await resp.read()
-            img = io.BytesIO(bytes_img)
-
-        bot.cache[code] = img
-
-    img.seek(0)
-    file = discord.File(img, filename=f"{code}.jpg")
-    await ctx.send(file=file)
+    await ctx.send(f"https://http.cat/{_parse_code(code)}.jpg")
 
 
 @http.error
-async def http_error(ctx: commands.Context, error: Exception):
+async def http_error(ctx: commands.Context, error: Exception) -> None:
     if isinstance(error, commands.CommandOnCooldown):
         await ctx.invoke(http, code=429)
 
@@ -204,7 +220,21 @@ async def http_error(ctx: commands.Context, error: Exception):
 @bot.command(name="random")
 async def random_(ctx: commands.Context):
     """Shows a random http cat"""
-    code = random.randint(*random.choice(VALID_RANGES))
+    code = random.choice(VALID_CODES)
     return await http(ctx, code=code)
+
+
+@bot.slash_command(name="http")
+async def _http(interaction: discord.Interaction, code: Optional[str] = None) -> None:
+    """Shows the corresponding http cat image given a status code"""
+    await interaction.response.send_message(f"https://http.cat/{_parse_code(code)}.jpg")
+
+
+@bot.slash_command(name="http-random")
+async def _http_random(interaction: discord.Interaction) -> None:
+    """Shows a random http cat"""
+    code = random.randint(*random.choice(VALID_RANGES))
+    await interaction.response.send_message(f"https://http.cat/{code}.jpg")
+
 
 bot.run()
