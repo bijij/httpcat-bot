@@ -67,9 +67,6 @@ class Bot(commands.Bot):
         super().__init__(**options)
         self.source_url = options.pop("source_url")
 
-        # _before_invoke is set to None somewhere in the superclass
-        self._before_invoke = self.before_invoke
-
         self.__token = options.pop("token")
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         self.load_extension("jishaku")
