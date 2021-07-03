@@ -42,18 +42,20 @@ class Config(_ConfigOptional):
     source_url: str
 
 
-VALID_RANGES: Tuple[Tuple[int, int], ...] = (
-    (100, 101),
-    (200, 207),
-    (300, 307),
-    (400, 451),
-    (499, 511),
-    (599, 599),
-)
+# fmt: off
 
-VALID_CODES: List[int] = []
-for start, stop in VALID_RANGES:
-    VALID_CODES.extend(range(start, stop))
+VALID_CODES: List[int] = [
+    100, 101, 102, 200, 201, 202, 203, 204, 
+    206, 207, 300, 301, 302, 303, 304, 305,
+    307, 308, 400, 401, 402, 403, 404, 405,
+    406, 407, 408, 409, 410, 411, 412, 413, 
+    414, 415, 416, 417, 418, 420, 421, 422,
+    423, 424, 425, 426, 429, 431, 444, 450,
+    451, 499, 500, 501, 502 ,503, 504, 506,
+    507, 508, 509, 510, 511, 599,
+]
+
+# fmt: on
 
 
 DEFAULT_INTENTS: Dict[str, bool] = {
@@ -117,7 +119,6 @@ class Bot(commands.Bot):
 
 
 class UsefulHelp(commands.HelpCommand):
-
     def get_command_signature(self, command: commands.Command) -> str:
         clean_prefix = clean_content
 
