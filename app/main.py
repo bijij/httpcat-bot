@@ -65,18 +65,11 @@ DEFAULT_INTENTS: Dict[str, bool] = {
 class Bot(commands.Bot):
     def __init__(self, **options):
         super().__init__(**options)
-        self.cache = {}
         self.source_url = options.pop("source_url")
 
         # _before_invoke is set to None somewhere in the superclass
         self._before_invoke = self.before_invoke
 
-        CooldownMapping = commands.CooldownMapping
-        BucketType = commands.BucketType
-        self.cds = [
-            CooldownMapping.from_cooldown(5, 10, BucketType.member),
-            CooldownMapping.from_cooldown(500, 3600, BucketType.default),
-        ]
         self.__token = options.pop("token")
         os.environ["JISHAKU_NO_UNDERSCORE"] = "True"
         self.load_extension("jishaku")
@@ -94,15 +87,6 @@ class Bot(commands.Bot):
     def run(self, *args, **kwargs):
         """Accessing the config twice would be meh"""
         return super().run(self.__token, *args, **kwargs)
-
-    async def before_invoke(self, ctx: commands.Context):
-        """Proper rate limiting to avoid abuse"""
-        await ctx.trigger_typing()
-
-        for cd in self.cds:
-            bucket = cd.get_bucket(ctx.message)
-            if retry_after := bucket.update_rate_limit():
-                raise commands.CommandOnCooldown(cd, retry_after)
 
     async def on_command_error(self, ctx: commands.Context, error: Exception):
         """Basic error handling"""
@@ -135,9 +119,6 @@ class Bot(commands.Bot):
 
 
 class UsefulHelp(commands.HelpCommand):
-    def __init__(self):
-        command_attrs = {"cooldown": commands.Cooldown(1, 10)}
-        super().__init__(command_attrs=command_attrs)
 
     def get_command_signature(self, command: commands.Command) -> str:
         if command.name == "http":
@@ -211,12 +192,6 @@ async def http(ctx: commands.Context, *, code: Optional[Union[int, str]] = None)
     await ctx.send(f"https://http.cat/{_parse_code(code)}.jpg")
 
 
-@http.error
-async def http_error(ctx: commands.Context, error: Exception) -> None:
-    if isinstance(error, commands.CommandOnCooldown):
-        await ctx.invoke(http, code=429)
-
-
 @bot.command(name="random")
 async def random_(ctx: commands.Context):
     """Shows a random http cat"""
@@ -233,7 +208,7 @@ async def _http(interaction: discord.Interaction, code: Optional[str] = None) ->
 @bot.slash_command(name="http-random")
 async def _http_random(interaction: discord.Interaction) -> None:
     """Shows a random http cat"""
-    code = random.randint(*random.choice(VALID_RANGES))
+    code = random.choice(VALID_CODES)
     await interaction.response.send_message(f"https://http.cat/{code}.jpg")
 
 
