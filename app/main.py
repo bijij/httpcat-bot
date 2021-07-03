@@ -24,6 +24,7 @@ from typing import Dict, List, Optional, Tuple, TypedDict, Union
 import aiohttp
 import discord
 from discord.ext import commands
+from discord.ext.commands.converter import clean_content
 
 from config import CONFIG
 
@@ -118,10 +119,12 @@ class Bot(commands.Bot):
 class UsefulHelp(commands.HelpCommand):
 
     def get_command_signature(self, command: commands.Command) -> str:
-        if command.name == "http":
-            return f"{self.clean_prefix}{command.signature}"
+        clean_prefix = clean_content
 
-        signature = "{0.clean_prefix}{1.qualified_name} {1.signature}"
+        if command.name == "http":
+            return f"{self.context.prefix}{command.signature}"
+
+        signature = "{0.context.prefix}{1.qualified_name} {1.signature}"
         return signature.format(self, command)
 
     async def send_embed(self, embed: discord.Embed) -> discord.Message:
