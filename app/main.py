@@ -19,7 +19,7 @@ import os
 import asyncio
 import random
 
-from typing import Dict, List, Optional, Tuple, TypedDict, Union
+from typing import Dict, List, Optional, TypedDict, Union
 
 import aiohttp
 import discord
@@ -120,6 +120,7 @@ class Bot(commands.Bot):
 
 class UsefulHelp(commands.HelpCommand):
     def get_command_signature(self, command: commands.Command) -> str:
+        assert self.context is not None
         clean_prefix = clean_content
 
         if command.name == "http":
@@ -129,6 +130,7 @@ class UsefulHelp(commands.HelpCommand):
         return signature.format(self, command)
 
     async def send_embed(self, embed: discord.Embed) -> discord.Message:
+        assert self.context is not None
         destination = self.get_destination()
 
         bot = self.context.bot
@@ -142,6 +144,8 @@ class UsefulHelp(commands.HelpCommand):
 
     async def send_all_help(self, *args, **kwargs):
         """Takes over all send_x_help that has multiple commands"""
+        assert self.context is not None
+
         all_commands = [
             self.context.bot.get_command(command) for command in ("http", "random")
         ]
@@ -201,13 +205,13 @@ async def random_(ctx: commands.Context):
 
 
 @bot.slash_command(name="http")
-async def _http(interaction: discord.Interaction, code: Optional[str] = None) -> None:
+async def _http(bot: Bot, interaction: discord.Interaction, code: Optional[str] = None) -> None:
     """Shows the corresponding http cat image given a status code"""
     await interaction.response.send_message(f"https://http.cat/{_parse_code(code)}.jpg")
 
 
 @bot.slash_command(name="http-random")
-async def _http_random(interaction: discord.Interaction) -> None:
+async def _http_random(bot: Bot, interaction: discord.Interaction) -> None:
     """Shows a random http cat"""
     code = random.choice(VALID_CODES)
     await interaction.response.send_message(f"https://http.cat/{code}.jpg")
